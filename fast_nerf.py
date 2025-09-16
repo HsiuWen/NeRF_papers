@@ -4,7 +4,8 @@ from tqdm import tqdm
 import torch.nn as nn
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
-
+import os
+import datetime
 
 class FastNerf(nn.Module):
     def __init__(self, embedding_dim_pos=10, embedding_dim_direction=4, hidden_dim_pos=384, hidden_dim_dir=128, D=8):
@@ -127,10 +128,12 @@ def test(model, hn, hf, dataset, img_index=0, nb_bins=192, H=400, W=400):
     regenerated_px_values = render_rays(model, ray_origins.to(device), ray_directions.to(device), hn=hn, hf=hf,
                                         nb_bins=nb_bins)
 
+    if not os.path.exists('../novel_views/fastnerf'):
+        os.makedirs('../novel_views/fastrnerf')
     plt.figure()
     plt.imshow(regenerated_px_values.data.cpu().numpy().reshape(H, W, 3).clip(0, 1))
     plt.axis('off')
-    plt.savefig(f'novel_views/img_{img_index}.png', bbox_inches='tight')
+    plt.savefig(f'novel_views/fastnerf/img_{img_index}.png', bbox_inches='tight')
     plt.close()
 
 
@@ -151,22 +154,23 @@ def train(nerf_model, optimizer, scheduler, data_loader, device='cpu', hn=0, hf=
             optimizer.step()
             training_loss.append(loss.item())
         scheduler.step()
-        torch.save(nerf_model.cpu(), 'nerf_model')
+        torch.save(nerf_model.cpu(), 'fastnerf_model')
         nerf_model.to(device)
     return training_loss
 
 
 if __name__ == '__main__':
     device = 'cuda'
-    training_dataset = torch.from_numpy(np.load('training_data.pkl', allow_pickle=True))
-    testing_dataset = torch.from_numpy(np.load('testing_data.pkl', allow_pickle=True))
+    training_dataset = torch.from_numpy(np.load('../datasets/training_data_400x400.pkl', allow_pickle=True))
+    testing_dataset = torch.from_numpy(np.load('../datasets/testing_data_400x400.pkl', allow_pickle=True))
     model = FastNerf().to(device)
     model_optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
     scheduler = torch.optim.lr_scheduler.MultiStepLR(model_optimizer, milestones=[2, 4, 8], gamma=0.5)
 
     data_loader = DataLoader(training_dataset, batch_size=1024, shuffle=True)
+    print('start training at:',datetime.datetime.now())
     train(model, model_optimizer, scheduler, data_loader, nb_epochs=16, device=device, hn=2, hf=6)
-
+    print('end training at:',datetime.datetime.now())
     cache = Cache(model, 2.2, device, 192, 128)
     for idx in range(200):
         test(cache, 2., 6., testing_dataset, img_index=idx, nb_bins=192, H=400, W=400)
