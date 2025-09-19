@@ -5,6 +5,7 @@ import torch.nn as nn
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 import os 
+import imageio
 
 @torch.no_grad()
 def test(hn, hf, dataset, chunk_size=10, img_index=0, nb_bins=192, H=400, W=400):
@@ -136,14 +137,23 @@ def train(nerf_model, optimizer, scheduler, data_loader, device='cpu', hn=0, hf=
             training_loss.append(loss.item())
         scheduler.step()
 
-        for img_index in range(200):
-            test(hn, hf, testing_dataset, img_index=img_index, nb_bins=nb_bins, H=H, W=W)
     return training_loss
 
-
+def create_gif_from_images(image_folder, output_gif, duration=0.1):
+    images = []
+    # Collect image files and sort by index
+    files = sorted([f for f in os.listdir(image_folder) if f.endswith('.png')],
+                   key=lambda x: int(x.split('_')[1].split('.')[0]))
+    print(f"Found {len(files)} images in {image_folder}") 
+    for filename in files:
+        img_path = os.path.join(image_folder, filename)
+        images.append(imageio.imread(img_path))
+    imageio.mimsave(output_gif, images, duration=duration)
+    print(f"GIF saved as {output_gif}")
+    
 if __name__ == '__main__':
     device = 'cuda'
-    
+    mode = 'train'  # 'train' or 'test'
     training_dataset = torch.from_numpy(np.load('../datasets/training_data_400x400.pkl', allow_pickle=True))
     testing_dataset = torch.from_numpy(np.load('../datasets/testing_data_400x400.pkl', allow_pickle=True))
     H,W=400,400
@@ -154,13 +164,23 @@ if __name__ == '__main__':
     # H,W=800,800
      # Create model, optimizer and data loader
     model = NerfModel(hidden_dim=256).to(device)
-    model_optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
-    scheduler = torch.optim.lr_scheduler.MultiStepLR(model_optimizer, milestones=[2, 4, 8], gamma=0.5)
-    data_loader = DataLoader(training_dataset, batch_size=1024, shuffle=True)
-    train(model, model_optimizer, scheduler, data_loader, nb_epochs=16, device=device, hn=2, hf=6, nb_bins=192, H=H,
+    if mode == 'train':
+        model_optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(model_optimizer, milestones=[2, 4, 8], gamma=0.5)
+        data_loader = DataLoader(training_dataset, batch_size=1024, shuffle=True)
+        train(model, model_optimizer, scheduler, data_loader, nb_epochs=16, device=device, hn=2, hf=6, nb_bins=192, H=H,
           W=W)
     
-    # Save model after training
-    if not os.path.exists('../models'):
-        os.makedirs('../models')
-    torch.save(model.state_dict(), '../models/nerf_model.pth')
+        # Save model after training
+        if not os.path.exists('../models'):
+            os.makedirs('../models')
+        torch.save(model.state_dict(), '../models/nerf_model.pth')
+    else:
+        model.load_state_dict(torch.load('../models/nerf_model.pth'))
+        model.eval()
+        model.to(device)
+    
+    for img_index in range(200):
+            test(2, 6, testing_dataset, img_index=img_index, nb_bins=192, H=H, W=W)
+
+    create_gif_from_images()('../novel_views/nerf', '../novel_views/nerf.gif', duration=0.1)

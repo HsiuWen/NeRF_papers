@@ -5,6 +5,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from PIL import Image
 import os
+import imageio
 
 @torch.no_grad()
 def test(hn, hf, dataset, img_index, chunk_size=20, nb_bins=192, H=400, W=400):
@@ -135,7 +136,22 @@ def train(nerf_model, optimizer, data_loader, device='cpu', hn=0, hf=1, nb_epoch
             loss.backward()
             optimizer.step()
 
+def create_gif_from_images(image_folder, output_gif, duration=0.1):
+    images = []
+    # Collect image files and sort by index
+    files = sorted([f for f in os.listdir(image_folder) if f.endswith('.png')],
+                   key=lambda x: int(x.split('_')[1].split('.')[0]))
+    print(f"Found {len(files)} images in {image_folder}") 
+    for filename in files:
+        img_path = os.path.join(image_folder, filename)
+        images.append(imageio.imread(img_path))
+    
+    imageio.mimsave(output_gif, images, duration=duration)
+    print(f"GIF saved as {output_gif}")
+
 if __name__ == "__main__":
+    mode = 'train'  # 'train' or 'test'
+
     device = 'cuda'
     training_dataset = torch.from_numpy(np.load('../datasets/training_data_800x800.pkl',
                                                 allow_pickle=True))
@@ -149,16 +165,24 @@ if __name__ == "__main__":
     b = np.exp((np.log(N_max) - np.log(N_min)) / (L - 1))
     Nl = [int(np.floor(N_min * b**l)) for l in range(L)]
     model = NGP(T, Nl, 4, device, 3)
-    model_optimizer = torch.optim.Adam(
-        [{"params": model.lookup_tables.parameters(), "lr": 1e-2, "betas": (0.9, 0.99), "eps": 1e-15, "weight_decay": 0.},
-         {"params": model.density_MLP.parameters(), "lr": 1e-2,  "betas": (0.9, 0.99), "eps": 1e-15, "weight_decay": 10**-6},
-         {"params": model.color_MLP.parameters(), "lr": 1e-2,  "betas": (0.9, 0.99), "eps": 1e-15, "weight_decay": 10**-6}])
-    data_loader = DataLoader(training_dataset, batch_size=2**14, shuffle=True)
-    train(model, model_optimizer, data_loader, nb_epochs=1, device=device,
-          hn=2, hf=6, nb_bins=192, H=800, W=800)
-    # Save model after training
-    if not os.path.exists('../models'):
-        os.makedirs('../models')
-    torch.save(model.state_dict(), '../models/ngp_model.pth')
+    if mode == 'train':
+        model_optimizer = torch.optim.Adam(
+            [{"params": model.lookup_tables.parameters(), "lr": 1e-2, "betas": (0.9, 0.99), "eps": 1e-15, "weight_decay": 0.},
+                {"params": model.density_MLP.parameters(), "lr": 1e-2,  "betas": (0.9, 0.99), "eps": 1e-15, "weight_decay": 10**-6},
+                {"params": model.color_MLP.parameters(), "lr": 1e-2,  "betas": (0.9, 0.99), "eps": 1e-15, "weight_decay": 10**-6}])
+        data_loader = DataLoader(training_dataset, batch_size=2**14, shuffle=True)
+        train(model, model_optimizer, data_loader, nb_epochs=1, device=device,
+                hn=2, hf=6, nb_bins=192, H=800, W=800)
+        # Save model after training
+        if not os.path.exists('../models'):
+            os.makedirs('../models')
+        torch.save(model.state_dict(), '../models/ngp_model.pth')
+    else:
+        model.load_state_dict(torch.load('../models/ngp_model.pth'))
+        model.eval()
+        model.to(device)
+
     for img_index in range(2):
         test(2, 6, testing_dataset, img_index, nb_bins=192, H=800, W=800)
+
+create_gif_from_images('../novel_views/ngp', '../novel_views/ngp.gif', duration=0.1)
