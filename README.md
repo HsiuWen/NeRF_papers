@@ -1,5 +1,8 @@
 # Neural Radiant Field (NeRF) and relative researches
 
+0. Preprocessing: dataset that construct propoer camera pose, orientation and rays, see notebook: preprocessing.ipynb
+Teach camera pinhole model and how to derive camera pose and direction for rays preparation.
+
 1. [NeRF: representing scenes as neural radiance fields for view synthesis](https://arxiv.org/abs/2003.08934)
 , 2021
 
@@ -11,7 +14,7 @@ code:nerf.py
 
 To accelerate the reduce the size of MLP, it factorized the orginal NeRF to NeRF_pos, NeRF_dir and then use cache to accelrate the rendering time in testing mode.
 
-cide:fastnerf.py
+code:fastnerf.py
 
 3. [NeRF--: Neural Radiance Fields Without Known Camera Parameters](https://nerfmm.active.vision/),2021
 
@@ -43,6 +46,7 @@ code: nerf-sg.py
 **Dataset:** [Download the training and testing datasets](https://drive.google.com/drive/folders/1eO7DXFhWWpauC-9LDhOimtIKxY3yRCIm?usp=sharing).
 
 ```commandline
+$ conda create -n nerf_env python=3.13
 $ pip3 install -r requirements.txt
 $ python3 ngp.py
 ```
